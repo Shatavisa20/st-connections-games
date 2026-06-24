@@ -286,6 +286,53 @@ body{
 
 .cats-revealed h3{font-family:'Orbitron',sans-serif;font-size:11px;color:#86d84a;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:10px;font-weight:600;}
 
+/* ── SCREENSHOT PROMPT ── */
+.screenshot-prompt{
+  background:linear-gradient(135deg, rgba(134,216,74,0.15) 0%, rgba(134,216,74,0.05) 100%);
+  border:1px solid rgba(134,216,74,0.4);
+  border-radius:8px;
+  padding:14px 16px;
+  margin-bottom:1.25rem;
+  display:flex;
+  align-items:center;
+  gap:14px;
+  position:relative;
+  overflow:hidden;
+}
+.screenshot-prompt::before{
+  content:'';
+  position:absolute;
+  inset:0;
+  background:radial-gradient(circle at 100% 0%, rgba(134,216,74,0.15) 0%, transparent 50%);
+  pointer-events:none;
+}
+.sp-icon{
+  font-size:28px;
+  flex-shrink:0;
+  filter:drop-shadow(0 0 8px rgba(134,216,74,0.4));
+}
+.sp-text{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  position:relative;
+  z-index:2;
+}
+.sp-text strong{
+  font-family:'Orbitron',sans-serif;
+  font-size:13px;
+  font-weight:700;
+  color:#86d84a;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+}
+.sp-text span{
+  font-size:12px;
+  color:rgba(255,255,255,0.75);
+  line-height:1.4;
+  font-weight:500;
+}
+
 /* ── MOBILE ── */
 @media (max-width: 600px) {
   body { padding: 0.75rem 0.75rem 2rem; }
@@ -393,12 +440,18 @@ body{
     <div class="stat-card"><div class="stat-label">Duration</div><div class="stat-value" id="stat-dur"></div></div>
     <div class="stat-card"><div class="stat-label">Retries</div><div class="stat-value" id="stat-retries"></div></div>
   </div>
+
+  <div class="screenshot-prompt">
+    <div class="sp-icon">📸</div>
+    <div class="sp-text">
+      <strong>Screenshot this screen</strong>
+      <span>Share it with the facilitator to enter the leaderboard.</span>
+    </div>
+  </div>
+
   <div class="cats-revealed">
     <h3>All categories</h3>
     <div id="result-cats"></div>
-  </div>
-  <div style="text-align:center;margin-top:1rem;">
-    <button class="btn" id="play-again-btn" type="button">Play again</button>
   </div>
 </div>
 </div>
@@ -412,6 +465,12 @@ body{
     {label:"✈️ Wanderlust booking platforms",color:"#2e1a10",textColor:"#f0a86a",words:["EXPEDIA","VIA","TRIVAGO","HOPPER"]},
     {label:"🤖 Claude's signature superpowers",color:"#2a1020",textColor:"#f09ab8",words:["PROJECTS","SKILLS","ARTIFACTS","MEMORY"]}
   ];
+
+  // ── ONE-PLAY-PER-DEVICE LOCK ──
+  var GAME_KEY = "st_connections_played_2026";
+  function hasPlayed(){ try { return !!localStorage.getItem(GAME_KEY); } catch(e){ return false; } }
+  function savePlayResult(data){ try { localStorage.setItem(GAME_KEY, JSON.stringify(data)); } catch(e){} }
+  function getPreviousResult(){ try { return JSON.parse(localStorage.getItem(GAME_KEY) || "null"); } catch(e){ return null; } }
   var teamName="",selected=[],solved=[],retries=0;
   var startTime=null,endTime=null,timerInterval=null,gameWords=[];
   function $(id){return document.getElementById(id);}
@@ -484,6 +543,15 @@ body{
         '<div class="cat-label" style="color:'+cat.textColor+';">'+cat.label+' '+(wasSolved?"\u2713":"")+'</div>'+
         '<div class="cat-words" style="color:'+cat.textColor+';">'+cat.words.join(" &middot; ")+'</div></div>';
     }).join("");
+    // Save the play result so this device can't replay
+    savePlayResult({
+      team: teamName,
+      start: fmtClock(startTime),
+      end: fmtClock(endTime),
+      duration: fmtTime(elapsed),
+      retries: retries,
+      won: won
+    });
     show("result-screen");
   }
   function startGame(){
@@ -499,6 +567,21 @@ body{
     },1000);
   }
   $("start-btn").addEventListener("click",function(){
+    if(hasPlayed()){
+      var prev=getPreviousResult();
+      if(prev){
+        $("result-emoji").textContent=prev.won?"\uD83C\uDFC6":"\uD83E\uDDE9";
+        $("result-team").textContent=prev.team;
+        $("result-line").textContent="You've already played! Here's your result:";
+        $("stat-start").textContent=prev.start;
+        $("stat-end").textContent=prev.end;
+        $("stat-dur").textContent=prev.duration;
+        $("stat-retries").textContent=prev.retries;
+        $("result-cats").innerHTML='<div style="text-align:center;padding:1rem;color:rgba(255,255,255,0.5);font-size:13px;">One play per device — submit this result to the facilitator.</div>';
+        show("result-screen");
+      }
+      return;
+    }
     if(!$("team-input").value.trim()){toast("Enter a team name!");return;}
     startGame();
   });
@@ -506,7 +589,22 @@ body{
   $("shuffle-btn").addEventListener("click",function(){shuffle(gameWords);renderGrid();});
   $("deselect-btn").addEventListener("click",function(){selected=[];renderGrid();});
   $("submit-btn").addEventListener("click",submitGuess);
-  $("play-again-btn").addEventListener("click",function(){show("entry-screen");});
+
+  // On page load — if already played, show their result instead of the entry screen
+  if(hasPlayed()){
+    var prev=getPreviousResult();
+    if(prev){
+      $("result-emoji").textContent=prev.won?"\uD83C\uDFC6":"\uD83E\uDDE9";
+      $("result-team").textContent=prev.team;
+      $("result-line").textContent="You've already played! Here's your result:";
+      $("stat-start").textContent=prev.start;
+      $("stat-end").textContent=prev.end;
+      $("stat-dur").textContent=prev.duration;
+      $("stat-retries").textContent=prev.retries;
+      $("result-cats").innerHTML='<div style="text-align:center;padding:1rem;color:rgba(255,255,255,0.5);font-size:13px;">One play per device — submit this result to the facilitator.</div>';
+      show("result-screen");
+    }
+  }
 })();
 </script>
 </body>
